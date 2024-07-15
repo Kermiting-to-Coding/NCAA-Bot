@@ -1,0 +1,14 @@
+{
+  "name": "ncaa-bot",
+  "version": "1.0.0",
+  "description": "Bot to create matches and further expansion",
+  "main": "index.js",
+  "scripts": {
+    "test": "none"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "discord.js": "^14.15.3"
+  }
+}
