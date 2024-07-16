@@ -1,0 +1,5 @@
+# Command to build the application
+build = "npm install"
+
+# Command to start the application
+start = "node index.js"
