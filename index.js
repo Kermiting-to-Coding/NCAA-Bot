@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, Partials } = require('discord.js');
+const { Client, GatewayIntentBits, Partials, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 require('dotenv').config();
 
 const client = new Client({
@@ -26,7 +26,7 @@ client.on('messageCreate', async (message) => {
   // Check for the dev or commissioner role before executing commands
   const hasPermission = message.member.roles.cache.has(devRoleId) || message.member.roles.cache.has(commissionerRoleId);
 
-  if (message.content.startsWith('!match') || message.content.startsWith('!close')) {
+  if (message.content.startsWith('!match') || message.content.startsWith('!close') || message.content.startsWith('!winner') || message.content.startsWith('!purge')) {
     if (!hasPermission) {
       message.reply('You do not have permission to use this command.');
       return;
@@ -92,6 +92,74 @@ client.on('messageCreate', async (message) => {
     } else {
       message.reply('This command can only be used in ticket channels.');
     }
+  }
+
+  if (message.content.startsWith('!winner')) {
+    if (message.channel.name.startsWith('ticket-')) {
+      const mentionedUsers = message.mentions.users;
+
+      if (mentionedUsers.size < 1) {
+        message.reply('Please mention the user who won the match.');
+        return;
+      }
+
+      const winner = mentionedUsers.first();
+      const row = new ActionRowBuilder()
+        .addComponents(
+          new ButtonBuilder()
+            .setCustomId('close_ticket')
+            .setLabel('Close Ticket')
+            .setStyle(ButtonStyle.Danger)
+        );
+
+      message.channel.send({
+        content: `Congratulations ${winner}, you have won the match! <@&${commissionerRoleId}>, ${winner.tag} has won their match. The ticket can now be closed.`,
+        components: [row]
+      });
+    } else {
+      message.reply('This command can only be used in ticket channels.');
+    }
+  }
+
+  if (message.content.startsWith('!purge')) {
+    const args = message.content.split(' ');
+
+    if (args.length !== 2) {
+      message.reply('Please specify the number of messages to delete. Usage: `!purge <number>`');
+      return;
+    }
+
+    const deleteCount = parseInt(args[1], 10);
+
+    if (isNaN(deleteCount) || deleteCount < 1 || deleteCount > 100) {
+      message.reply('Please provide a number between 1 and 100 for the number of messages to delete.');
+      return;
+    }
+
+    const fetched = await message.channel.messages.fetch({ limit: deleteCount });
+    message.channel.bulkDelete(fetched)
+      .catch(error => message.reply(`Couldn't delete messages because of: ${error}`));
+  }
+});
+
+client.on('interactionCreate', async interaction => {
+  if (!interaction.isButton()) return;
+
+  const devRoleId = '1262534159855784007'; // Server dev role ID
+  const commissionerRoleId = '1262533267232395324'; // Commissioner role ID
+
+  if (interaction.customId === 'close_ticket') {
+    const hasPermission = interaction.member.roles.cache.has(devRoleId) || interaction.member.roles.cache.has(commissionerRoleId);
+
+    if (!hasPermission) {
+      await interaction.reply({ content: 'You do not have permission to use this button.', ephemeral: true });
+      return;
+    }
+
+    await interaction.reply({ content: 'Closing the ticket...', ephemeral: true });
+    setTimeout(() => {
+      interaction.channel.delete().catch(console.error);
+    }, 5000); // Delay to allow the message to be read before deletion
   }
 });
 
