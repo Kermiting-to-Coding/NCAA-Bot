@@ -29,10 +29,40 @@ client.on('messageCreate', async (message) => {
   // Check for the dev or commissioner role before executing commands
   const hasPermission = message.member.roles.cache.has(devRoleId) || message.member.roles.cache.has(commissionerRoleId);
 
-  if (message.content.startsWith('!match') || message.content.startsWith('!close') || message.content.startsWith('!winner') || message.content.startsWith('!purge') || message.content.startsWith('!wins')) {
+//user Allowed Commands
+
+  if (message.content.startsWith('!wins')) {
+    const mentionedUsers = message.mentions.users;
+
+    if (mentionedUsers.size < 1) {
+      message.reply('Please mention the user whose wins you want to check.');
+      return;
+    }
+
+    const user = mentionedUsers.first();
+    let winsData = {};
+    if (fs.existsSync(winsFilePath)) {
+      winsData = JSON.parse(fs.readFileSync(winsFilePath));
+    }
+
+    const wins = winsData[user.id] ? winsData[user.id].wins : 0;
+    message.reply(`${user.tag} has ${wins} wins.`);
+    return;
+  }
+
+
+
+
+
+
+
+
+
+  // Below will only be Commish and Server Dev Role allowed.... Hopefully. 
+  if (message.content.startsWith('!match') || message.content.startsWith('!close') || message.content.startsWith('!winner') || message.content.startsWith('!purge') || message.content.startsWith('!delwin') || message.content.startsWith('!clearwins')) {
     if (!hasPermission) {
       message.reply('You do not have permission to use this command.');
-      return;
+      return; // Stop further execution if the user doesn't have permission
     }
   }
 
@@ -156,11 +186,13 @@ client.on('messageCreate', async (message) => {
       .catch(error => message.reply(`Couldn't delete messages because of: ${error}`));
   }
 
-  if (message.content.startsWith('!wins')) {
+ 
+
+  if (message.content.startsWith('!delwin')) {
     const mentionedUsers = message.mentions.users;
 
     if (mentionedUsers.size < 1) {
-      message.reply('Please mention the user whose wins you want to check.');
+      message.reply('Please mention the user whose win you want to delete.');
       return;
     }
 
@@ -170,8 +202,36 @@ client.on('messageCreate', async (message) => {
       winsData = JSON.parse(fs.readFileSync(winsFilePath));
     }
 
-    const wins = winsData[user.id] ? winsData[user.id].wins : 0;
-    message.reply(`${user.tag} has ${wins} wins.`);
+    if (winsData[user.id] && winsData[user.id].wins > 0) {
+      winsData[user.id].wins -= 1;
+      fs.writeFileSync(winsFilePath, JSON.stringify(winsData, null, 2));
+      message.reply(`One win has been deleted from ${user.tag}. They now have ${winsData[user.id].wins} wins.`);
+    } else {
+      message.reply(`${user.tag} does not have any wins to delete.`);
+    }
+  }
+
+  if (message.content.startsWith('!clearwins')) {
+    const mentionedUsers = message.mentions.users;
+
+    if (mentionedUsers.size < 1) {
+      message.reply('Please mention the user whose wins you want to clear.');
+      return;
+    }
+
+    const user = mentionedUsers.first();
+    let winsData = {};
+    if (fs.existsSync(winsFilePath)) {
+      winsData = JSON.parse(fs.readFileSync(winsFilePath));
+    }
+
+    if (winsData[user.id]) {
+      winsData[user.id].wins = 0;
+      fs.writeFileSync(winsFilePath, JSON.stringify(winsData, null, 2));
+      message.reply(`All wins have been cleared for ${user.tag}.`);
+    } else {
+      message.reply(`${user.tag} does not have any wins to clear.`);
+    }
   }
 });
 
@@ -195,14 +255,5 @@ client.on('interactionCreate', async interaction => {
     }, 5000); // Delay to allow the message to be read before deletion
   }
 });
-
-
-
-if (message.content.startsWith('!help')){
-  message.reply('Please Read this Document. https://docs.google.com/document/d/1uzsdKGoaz3ueeJ3CxjIhMdLqQ8-me5FCva0zuC4T5j4/edit?usp=sharing ')
-
-}
-
-
 
 client.login(token);
