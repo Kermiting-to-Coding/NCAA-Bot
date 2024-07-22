@@ -1,4 +1,6 @@
 const { Client, GatewayIntentBits, Partials, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const fs = require('fs');
+const path = require('path');
 require('dotenv').config();
 
 const client = new Client({
@@ -13,6 +15,7 @@ const client = new Client({
 });
 
 const token = process.env.DISCORD_BOT_TOKEN;
+const winsFilePath = path.join(__dirname, 'wins.json');
 
 client.once('ready', () => {
   console.log(`Logged in as ${client.user.tag}`);
@@ -26,7 +29,7 @@ client.on('messageCreate', async (message) => {
   // Check for the dev or commissioner role before executing commands
   const hasPermission = message.member.roles.cache.has(devRoleId) || message.member.roles.cache.has(commissionerRoleId);
 
-  if (message.content.startsWith('!match') || message.content.startsWith('!close') || message.content.startsWith('!winner') || message.content.startsWith('!purge')) {
+  if (message.content.startsWith('!match') || message.content.startsWith('!close') || message.content.startsWith('!winner') || message.content.startsWith('!purge') || message.content.startsWith('!wins')) {
     if (!hasPermission) {
       message.reply('You do not have permission to use this command.');
       return;
@@ -79,7 +82,8 @@ client.on('messageCreate', async (message) => {
       permissionOverwrites: permissionOverwrites
     });
 
-    ticketChannel.send(`Hello ${message.author}, your ticket has been created for the match between ${mentionedUsers.map(user => user.tag).join(' and ')}.`);
+    const mentions = mentionedUsers.map(user => `<@${user.id}>`).join(', ');
+    ticketChannel.send(`Hello ${message.author}, your ticket has been created for the match between ${mentions}.`);
   }
 
   if (message.content.startsWith('!close')) {
@@ -112,6 +116,17 @@ client.on('messageCreate', async (message) => {
             .setStyle(ButtonStyle.Danger)
         );
 
+      // Update wins in the JSON file
+      let winsData = {};
+      if (fs.existsSync(winsFilePath)) {
+        winsData = JSON.parse(fs.readFileSync(winsFilePath));
+      }
+      if (!winsData[winner.id]) {
+        winsData[winner.id] = { wins: 0 };
+      }
+      winsData[winner.id].wins += 1;
+      fs.writeFileSync(winsFilePath, JSON.stringify(winsData, null, 2));
+
       message.channel.send({
         content: `Congratulations ${winner}, you have won the match! <@&${commissionerRoleId}>, ${winner.tag} has won their match. The ticket can now be closed.`,
         components: [row]
@@ -140,6 +155,24 @@ client.on('messageCreate', async (message) => {
     message.channel.bulkDelete(fetched)
       .catch(error => message.reply(`Couldn't delete messages because of: ${error}`));
   }
+
+  if (message.content.startsWith('!wins')) {
+    const mentionedUsers = message.mentions.users;
+
+    if (mentionedUsers.size < 1) {
+      message.reply('Please mention the user whose wins you want to check.');
+      return;
+    }
+
+    const user = mentionedUsers.first();
+    let winsData = {};
+    if (fs.existsSync(winsFilePath)) {
+      winsData = JSON.parse(fs.readFileSync(winsFilePath));
+    }
+
+    const wins = winsData[user.id] ? winsData[user.id].wins : 0;
+    message.reply(`${user.tag} has ${wins} wins.`);
+  }
 });
 
 client.on('interactionCreate', async interaction => {
@@ -162,5 +195,14 @@ client.on('interactionCreate', async interaction => {
     }, 5000); // Delay to allow the message to be read before deletion
   }
 });
+
+
+
+if (message.content.startsWith('!help')){
+  message.reply('Please Read this Document. https://docs.google.com/document/d/1uzsdKGoaz3ueeJ3CxjIhMdLqQ8-me5FCva0zuC4T5j4/edit?usp=sharing ')
+
+}
+
+
 
 client.login(token);
