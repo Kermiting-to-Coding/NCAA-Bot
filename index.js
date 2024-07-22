@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, Partials, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { Client, GatewayIntentBits, Partials, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionsBitField } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
@@ -16,6 +16,7 @@ const client = new Client({
 
 const token = process.env.DISCORD_BOT_TOKEN;
 const winsFilePath = path.join(__dirname, 'wins.json');
+const strikeRoleId = '1264770419420827758'; // Temp role ID
 
 client.once('ready', () => {
   console.log(`Logged in as ${client.user.tag}`);
@@ -30,7 +31,7 @@ client.on('messageCreate', async (message) => {
   const hasPermission = message.member.roles.cache.has(devRoleId) || message.member.roles.cache.has(commissionerRoleId);
 
 //user Allowed Commands
-
+// Wins Command to POST the Wins Data. 
   if (message.content.startsWith('!wins')) {
     const mentionedUsers = message.mentions.users;
 
@@ -49,6 +50,14 @@ client.on('messageCreate', async (message) => {
     message.reply(`${user.tag} has ${wins} wins.`);
     return;
   }
+  // Request Commish to help them
+  if (message.content.startsWith('!request')){
+    
+    const messageAuthor = message.author.id;
+    message.reply(`Hello <@&${commissionerRoleId}> <@${messageAuthor}> has requested your services please DM him.`);
+    return;
+
+  }
 
 
 
@@ -65,6 +74,92 @@ client.on('messageCreate', async (message) => {
       return; // Stop further execution if the user doesn't have permission
     }
   }
+
+
+  // Strike Commands
+  if (message.content.startsWith('!strike')) {
+    if (!hasPermission) {
+      message.reply('You do not have permission to use this command.');
+      return;
+    }
+
+    const mentionedUsers = message.mentions.users;
+    if (mentionedUsers.size < 1) {
+      message.reply('Please mention the user to strike.');
+      return;
+    }
+
+    const user = message.guild.members.cache.get(mentionedUsers.first().id);
+    if (!user) {
+      message.reply('User not found.');
+      return;
+    }
+
+    // Check if the bot has permission to manage roles
+    const botMember = message.guild.members.cache.get(client.user.id);
+    if (!botMember.permissions.has(PermissionsBitField.Flags.ManageRoles)) {
+      message.reply('I do not have permission to manage roles.');
+      return;
+    }
+
+    // Add the strike role
+    user.roles.add(strikeRoleId).then(() => {
+      message.reply(`${user.user.tag} has been given the strike role.`);
+
+      // Remove the role after 2 days
+      setTimeout(() => {
+        user.roles.remove(strikeRoleId).then(() => {
+          message.channel.send(`${user.user.tag} has had the strike role removed.`);
+        }).catch(error => {
+          console.error(`Failed to remove strike role from ${user.user.tag}: ${error}`);
+        });
+      }, 2 * 24 * 60 * 60 * 1000); // 2 days in milliseconds
+    }).catch(error => {
+      console.error(`Failed to assign strike role to ${user.user.tag}: ${error}`);
+      message.reply(`Failed to assign strike role: ${error.message}`);
+    });
+  }
+
+  if (message.content.startsWith('!removestrike')) {
+    if (!hasPermission) {
+      message.reply('You do not have permission to use this command.');
+      return;
+    }
+
+    const mentionedUsers = message.mentions.users;
+    if (mentionedUsers.size < 1) {
+      message.reply('Please mention the user to remove the strike from.');
+      return;
+    }
+
+    const user = message.guild.members.cache.get(mentionedUsers.first().id);
+    if (!user) {
+      message.reply('User not found.');
+      return;
+    }
+
+    // Check if the bot has permission to manage roles
+    const botMember = message.guild.members.cache.get(client.user.id);
+    if (!botMember.permissions.has(PermissionsBitField.Flags.ManageRoles)) {
+      message.reply('I do not have permission to manage roles.');
+      return;
+    }
+
+    // Remove the strike role
+    user.roles.remove(strikeRoleId).then(() => {
+      message.reply(`${user.user.tag} has had the strike role removed.`);
+    }).catch(error => {
+      console.error(`Failed to remove strike role from ${user.user.tag}: ${error}`);
+      message.reply(`Failed to remove strike role: ${error.message}`);
+    });
+  }
+
+
+
+
+
+
+
 
   if (message.content.startsWith('!match')) {
     const guild = message.guild;
