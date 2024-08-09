@@ -30,8 +30,8 @@ client.on('messageCreate', async (message) => {
   // Check for the dev or commissioner role before executing commands
   const hasPermission = message.member.roles.cache.has(devRoleId) || message.member.roles.cache.has(commissionerRoleId);
 
-//user Allowed Commands
-// Wins Command to POST the Wins Data. 
+  // User Allowed Commands
+  // Wins Command to POST the Wins Data.
   if (message.content.startsWith('!wins')) {
     const mentionedUsers = message.mentions.users;
 
@@ -50,31 +50,74 @@ client.on('messageCreate', async (message) => {
     message.reply(`${user.tag} has ${wins} wins.`);
     return;
   }
+
+  // Losses Command to POST the Losses Data.
+  if (message.content.startsWith('!losses')) {
+    const mentionedUsers = message.mentions.users;
+
+    if (mentionedUsers.size < 1) {
+      message.reply('Please mention the user whose losses you want to check.');
+      return;
+    }
+
+    const user = mentionedUsers.first();
+    let winsData = {};
+    if (fs.existsSync(winsFilePath)) {
+      winsData = JSON.parse(fs.readFileSync(winsFilePath));
+    }
+
+    const losses = winsData[user.id] ? winsData[user.id].losses : 0;
+    message.reply(`${user.tag} has ${losses} losses.`);
+    return;
+  }
+
   // Request Commish to help them
   if (message.content.startsWith('!request')){
-    
     const messageAuthor = message.author.id;
     message.reply(`Hello <@&${commissionerRoleId}> <@${messageAuthor}> has requested your services please DM him.`);
     return;
-
   }
 
 
+  if (message.content.startsWith('!allwins')) {
+    // Check if the wins file exists
+    if (!fs.existsSync(winsFilePath)) {
+        message.reply('No win records found.');
+        return;
+    }
+
+    // Load the wins data from the file
+    const winsData = JSON.parse(fs.readFileSync(winsFilePath));
+
+    // If no users have been tracked yet, return a message
+    if (Object.keys(winsData).length === 0) {
+        message.reply('No win records available.');
+        return;
+    }
+
+    // Create a message to display all wins
+    let allWinsMessage = '🏆 **League Win Records** 🏆\n\n';
+
+    for (const userId in winsData) {
+        const user = await client.users.fetch(userId);
+        const wins = winsData[userId].wins || 0;
+        const losses = winsData[userId].losses || 0;
+        allWinsMessage += `${user.tag}: ${wins} wins, ${losses} losses\n`;
+    }
+
+    message.channel.send(allWinsMessage);
+}
 
 
 
 
-
-
-
-  // Below will only be Commish and Server Dev Role allowed.... Hopefully. 
-  if (message.content.startsWith('!match') || message.content.startsWith('!close') || message.content.startsWith('!winner') || message.content.startsWith('!purge') || message.content.startsWith('!delwin') || message.content.startsWith('!clearwins')) {
+  // Commish and Server Dev Role allowed Commands
+  if (message.content.startsWith('!match') || message.content.startsWith('!close') || message.content.startsWith('!winner') || message.content.startsWith('!purge') || message.content.startsWith('!delwin') || message.content.startsWith('!clearwins') || message.content.startsWith('!addloss') || message.content.startsWith('!delloss')) {
     if (!hasPermission) {
       message.reply('You do not have permission to use this command.');
       return; // Stop further execution if the user doesn't have permission
     }
   }
-
 
   // Strike Commands
   if (message.content.startsWith('!strike')) {
@@ -154,13 +197,7 @@ client.on('messageCreate', async (message) => {
     });
   }
 
-
-
-
-
-
-
-
+  // Match Commands
   if (message.content.startsWith('!match')) {
     const guild = message.guild;
 
@@ -241,15 +278,29 @@ client.on('messageCreate', async (message) => {
             .setStyle(ButtonStyle.Danger)
         );
 
-      // Update wins in the JSON file
+      // Update wins and losses in the JSON file
       let winsData = {};
       if (fs.existsSync(winsFilePath)) {
         winsData = JSON.parse(fs.readFileSync(winsFilePath));
       }
       if (!winsData[winner.id]) {
-        winsData[winner.id] = { wins: 0 };
+        winsData[winner.id] = { wins: 0, losses: 0 };
       }
       winsData[winner.id].wins += 1;
+
+      // Record loss for the other user
+     
+
+
+      // Record loss for the other user
+      const otherUser = mentionedUsers.last();
+      if (winner.id !== otherUser.id) {
+        if (!winsData[otherUser.id]) {
+          winsData[otherUser.id] = { wins: 0, losses: 0 };
+        }
+        winsData[otherUser.id].losses += 1;
+      }
+
       fs.writeFileSync(winsFilePath, JSON.stringify(winsData, null, 2));
 
       message.channel.send({
@@ -280,8 +331,6 @@ client.on('messageCreate', async (message) => {
     message.channel.bulkDelete(fetched)
       .catch(error => message.reply(`Couldn't delete messages because of: ${error}`));
   }
-
- 
 
   if (message.content.startsWith('!delwin')) {
     const mentionedUsers = message.mentions.users;
@@ -326,6 +375,52 @@ client.on('messageCreate', async (message) => {
       message.reply(`All wins have been cleared for ${user.tag}.`);
     } else {
       message.reply(`${user.tag} does not have any wins to clear.`);
+    }
+  }
+
+  if (message.content.startsWith('!addloss')) {
+    const mentionedUsers = message.mentions.users;
+
+    if (mentionedUsers.size < 1) {
+      message.reply('Please mention the user whose loss you want to add.');
+      return;
+    }
+
+    const user = mentionedUsers.first();
+    let winsData = {};
+    if (fs.existsSync(winsFilePath)) {
+      winsData = JSON.parse(fs.readFileSync(winsFilePath));
+    }
+
+    if (!winsData[user.id]) {
+      winsData[user.id] = { wins: 0, losses: 0 };
+    }
+
+    winsData[user.id].losses += 1;
+    fs.writeFileSync(winsFilePath, JSON.stringify(winsData, null, 2));
+    message.reply(`A loss has been added to ${user.tag}. They now have ${winsData[user.id].losses} losses.`);
+  }
+
+  if (message.content.startsWith('!delloss')) {
+    const mentionedUsers = message.mentions.users;
+
+    if (mentionedUsers.size < 1) {
+      message.reply('Please mention the user whose loss you want to delete.');
+      return;
+    }
+
+    const user = mentionedUsers.first();
+    let winsData = {};
+    if (fs.existsSync(winsFilePath)) {
+      winsData = JSON.parse(fs.readFileSync(winsFilePath));
+    }
+
+    if (winsData[user.id] && winsData[user.id].losses > 0) {
+      winsData[user.id].losses -= 1;
+      fs.writeFileSync(winsFilePath, JSON.stringify(winsData, null, 2));
+      message.reply(`One loss has been deleted from ${user.tag}. They now have ${winsData[user.id].losses} losses.`);
+    } else {
+      message.reply(`${user.tag} does not have any losses to delete.`);
     }
   }
 });
