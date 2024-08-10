@@ -32,24 +32,34 @@ client.on('messageCreate', async (message) => {
 
   // User Allowed Commands
   // Wins Command to POST the Wins Data.
-  if (message.content.startsWith('!wins')) {
-    const mentionedUsers = message.mentions.users;
-
-    if (mentionedUsers.size < 1) {
-      message.reply('Please mention the user whose wins you want to check.');
-      return;
+  client.on('messageCreate', async (message) => {
+    if (message.content.startsWith('!wins')) {
+      const mentionedUsers = message.mentions.users;
+  
+      if (mentionedUsers.size < 1) {
+        message.reply('Please mention the user whose wins you want to check.');
+        return;
+      }
+  
+      const user = mentionedUsers.first();
+      let winsData = {};
+      if (fs.existsSync(winsFilePath)) {
+        winsData = JSON.parse(fs.readFileSync(winsFilePath));
+      }
+  
+      // These log statements should be placed here, after the variables are defined.
+      console.log('Wins data:', winsData);
+      console.log('User ID:', user.id);
+      console.log('User wins:', winsData[user.id] ? winsData[user.id].wins : 0);
+  
+      const wins = winsData[user.id] ? winsData[user.id].wins : 0;
+      const losses = winsData[user.id] ? winsData[user.id].losses : 0;
+  
+      message.reply(`${user.tag} has ${wins} wins and ${losses} losses.`);
     }
-
-    const user = mentionedUsers.first();
-    let winsData = {};
-    if (fs.existsSync(winsFilePath)) {
-      winsData = JSON.parse(fs.readFileSync(winsFilePath));
-    }
-
-    const wins = winsData[user.id] ? winsData[user.id].wins : 0;
-    message.reply(`${user.tag} has ${wins} wins.`);
-    return;
-  }
+  });
+  
+  
 
   // Losses Command to POST the Losses Data.
   if (message.content.startsWith('!losses')) {
@@ -79,34 +89,42 @@ client.on('messageCreate', async (message) => {
   }
 
 
+  // Command handler for various bot functions
   if (message.content.startsWith('!allwins')) {
-    // Check if the wins file exists
-    if (!fs.existsSync(winsFilePath)) {
-        message.reply('No win records found.');
-        return;
-    }
+  // Check if the wins file exists
+  if (!fs.existsSync(winsFilePath)) {
+      message.reply('No win records found.');
+      return;
+  }
 
-    // Load the wins data from the file
-    const winsData = JSON.parse(fs.readFileSync(winsFilePath));
+  // Load the wins data from the file
+  const winsData = JSON.parse(fs.readFileSync(winsFilePath));
 
-    // If no users have been tracked yet, return a message
-    if (Object.keys(winsData).length === 0) {
-        message.reply('No win records available.');
-        return;
-    }
+  // If no users have been tracked yet, return a message
+  if (Object.keys(winsData).length === 0) {
+      message.reply('No win records available.');
+      return;
+  }
 
-    // Create a message to display all wins
-    let allWinsMessage = '🏆 **League Win Records** 🏆\n\n';
+  // Create an array of users and sort by wins (in descending order)
+  const sortedUsers = Object.keys(winsData).map(userId => {
+      return { userId, wins: winsData[userId].wins || 0, losses: winsData[userId].losses || 0 };
+  }).sort((a, b) => b.wins - a.wins);  // Sort by wins in descending order
 
-    for (const userId in winsData) {
-        const user = await client.users.fetch(userId);
-        const wins = winsData[userId].wins || 0;
-        const losses = winsData[userId].losses || 0;
-        allWinsMessage += `${user.tag}: ${wins} wins, ${losses} losses\n`;
-    }
+  // Create a message to display all wins
+  let allWinsMessage = '🏆 **League Win Records** 🏆\n\n';
 
-    message.channel.send(allWinsMessage);
-}
+  // Use for...of loop to handle async operations properly
+  for (const [index, user] of sortedUsers.entries()) {
+      const medal = index === 0 ? '🥇' : ''; // Add gold medal emoji for the top player
+      const userTag = (await client.users.fetch(user.userId)).tag;  // Fetch the user's tag asynchronously
+      allWinsMessage += `${medal} ${userTag}: ${user.wins} wins, ${user.losses} losses\n`;
+  }
+
+  message.channel.send(allWinsMessage);
+  }
+
+
 
 
 
@@ -230,10 +248,12 @@ client.on('messageCreate', async (message) => {
     ];
 
     mentionedUsers.forEach(user => {
-      permissionOverwrites.push({
-        id: user.id,
-        allow: ['ViewChannel', 'SendMessages']
-      });
+      if (user.id !== message.author.id && user.id !== devRoleId && user.id !== commissionerRoleId) {
+        permissionOverwrites.push({
+          id: user.id,
+          allow: ['ViewChannel', 'SendMessages']
+        });
+      }
     });
 
     // Create a private channel for the ticket under the specified category
@@ -248,6 +268,7 @@ client.on('messageCreate', async (message) => {
     ticketChannel.send(`Hello ${message.author}, your ticket has been created for the match between ${mentions}.`);
   }
 
+
   if (message.content.startsWith('!close')) {
     if (message.channel.name.startsWith('ticket-')) {
       message.channel.send('This ticket will be closed.').then(() => {
@@ -260,16 +281,36 @@ client.on('messageCreate', async (message) => {
     }
   }
 
-  if (message.content.startsWith('!winner')) {
-    if (message.channel.name.startsWith('ticket-')) {
-      const mentionedUsers = message.mentions.users;
-
-      if (mentionedUsers.size < 1) {
-        message.reply('Please mention the user who won the match.');
+  client.on('messageCreate', async (message) => {
+    if (message.content.startsWith('!winner')) {
+      const args = message.mentions.users;
+  
+      if (args.size !== 2) {
+        message.reply('Please mention exactly two users, the first being the winner and the second being the loser.');
         return;
       }
-
-      const winner = mentionedUsers.first();
+  
+      const winner = args.first();
+      const loser = args.last();
+  
+      let winsData = {};
+      if (fs.existsSync(winsFilePath)) {
+        winsData = JSON.parse(fs.readFileSync(winsFilePath));
+      }
+  
+      if (!winsData[winner.id]) {
+        winsData[winner.id] = { wins: 0, losses: 0 };
+      }
+      winsData[winner.id].wins += 1;
+  
+      if (!winsData[loser.id]) {
+        winsData[loser.id] = { wins: 0, losses: 0 };
+      }
+      winsData[loser.id].losses += 1;
+  
+      fs.writeFileSync(winsFilePath, JSON.stringify(winsData, null, 2));
+  
+      // Create the button row for ticket closure
       const row = new ActionRowBuilder()
         .addComponents(
           new ButtonBuilder()
@@ -277,40 +318,40 @@ client.on('messageCreate', async (message) => {
             .setLabel('Close Ticket')
             .setStyle(ButtonStyle.Danger)
         );
-
-      // Update wins and losses in the JSON file
-      let winsData = {};
-      if (fs.existsSync(winsFilePath)) {
-        winsData = JSON.parse(fs.readFileSync(winsFilePath));
-      }
-      if (!winsData[winner.id]) {
-        winsData[winner.id] = { wins: 0, losses: 0 };
-      }
-      winsData[winner.id].wins += 1;
-
-      // Record loss for the other user
-     
-
-
-      // Record loss for the other user
-      const otherUser = mentionedUsers.last();
-      if (winner.id !== otherUser.id) {
-        if (!winsData[otherUser.id]) {
-          winsData[otherUser.id] = { wins: 0, losses: 0 };
-        }
-        winsData[otherUser.id].losses += 1;
-      }
-
-      fs.writeFileSync(winsFilePath, JSON.stringify(winsData, null, 2));
-
-      message.channel.send({
-        content: `Congratulations ${winner}, you have won the match! <@&${commissionerRoleId}>, ${winner.tag} has won their match. The ticket can now be closed.`,
+  
+      // Notify the users and the commissioner
+      await message.channel.send({
+        content: `Congratulations ${winner}, you have won the match! ${loser}, better luck next time.\n<@&${commissionerRoleId}>, please close the ticket using the button below.`,
         components: [row]
       });
-    } else {
-      message.reply('This command can only be used in ticket channels.');
     }
-  }
+  });
+  
+  client.on('interactionCreate', async interaction => {
+    if (!interaction.isButton()) return;
+  
+    if (interaction.customId === 'close_ticket') {
+      const devRoleId = '1262534159855784007'; // Server dev role ID
+      const commissionerRoleId = '1262533267232395324'; // Commissioner role ID
+  
+      const hasPermission = interaction.member.roles.cache.has(devRoleId) || interaction.member.roles.cache.has(commissionerRoleId);
+  
+      if (!hasPermission) {
+        await interaction.reply({ content: 'You do not have permission to use this button.', ephemeral: true });
+        return;
+      }
+  
+      await interaction.reply({ content: 'Closing the ticket...', ephemeral: true });
+      setTimeout(() => {
+        interaction.channel.delete().catch(console.error);
+      }, 5000); // Delay to allow the message to be read before deletion
+    }
+  });
+  
+  
+  
+  
+
 
   if (message.content.startsWith('!purge')) {
     const args = message.content.split(' ');
@@ -392,14 +433,20 @@ client.on('messageCreate', async (message) => {
       winsData = JSON.parse(fs.readFileSync(winsFilePath));
     }
 
+    // Initialize losses if not already present
     if (!winsData[user.id]) {
-      winsData[user.id] = { wins: 0, losses: 0 };
+        winsData[user.id] = { wins: 0, losses: 0 };
+    } else if (winsData[user.id].losses === undefined) {
+        winsData[user.id].losses = 0;
     }
 
+    // Increment the losses count
     winsData[user.id].losses += 1;
+
     fs.writeFileSync(winsFilePath, JSON.stringify(winsData, null, 2));
     message.reply(`A loss has been added to ${user.tag}. They now have ${winsData[user.id].losses} losses.`);
-  }
+}
+
 
   if (message.content.startsWith('!delloss')) {
     const mentionedUsers = message.mentions.users;
